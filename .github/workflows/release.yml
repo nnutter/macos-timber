@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and attach app bundle
+    runs-on: macos-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        uses: jdx/mise-action@v2
+
+      - name: Stamp version from tag
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" packaging/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" packaging/Info.plist
+          grep -A1 CFBundleShortVersionString packaging/Info.plist | head -n 2
+
+      - name: Package app bundle
+        run: mise run package
+
+      - name: Create release with asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" dist/Timber.zip \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

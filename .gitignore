@@ -1,0 +1,17 @@
+# SwiftPM build products and caches
+.build/
+.swiftpm/
+
+# Packaged app output (built by `make build`)
+dist/
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+*.o
+*.d
+
+# macOS
+.DS_Store

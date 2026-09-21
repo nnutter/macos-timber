@@ -1,0 +1,8 @@
+--swiftversion 6.0
+--indent 4
+--maxwidth 120
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--ifdef no-indent
+--disable unusedArguments
