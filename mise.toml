@@ -1,0 +1,64 @@
+[tools]
+swiftlint = "0.65.1"
+swiftformat = "0.63.0"
+
+[env]
+_.path = [
+  "/opt/homebrew/bin",
+  "/usr/local/bin",
+  "~/.local/bin",
+]
+
+[tasks.build]
+description = "Build dist/Timber.app via SwiftPM"
+run = """
+set -euo pipefail
+# Prefer an already-selected toolchain (e.g. CI runners); fall back to the
+# local Xcode install when nothing is selected.
+if [ -z "${DEVELOPER_DIR:-}" ] && [ -d /Applications/Xcode.app ]; then
+  export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+fi
+# --disable-sandbox plus redirected shared dirs keep the build inside the
+# sandbox so it runs without an approval prompt; scratch output already
+# lives in .build.
+SWIFT_PM_FLAGS="--disable-sandbox --cache-path /tmp/swiftpm-cache --config-path /tmp/swiftpm-config --security-path /tmp/swiftpm-security"
+swift build $SWIFT_PM_FLAGS
+BIN_DIR="$(swift build $SWIFT_PM_FLAGS --show-bin-path)"
+rm -rf dist/TimberMenu.app dist/Timber.app
+mkdir -p dist/Timber.app/Contents/MacOS dist/Timber.app/Contents/Resources
+cp "$BIN_DIR/Timber" dist/Timber.app/Contents/MacOS/Timber
+cp packaging/Info.plist dist/Timber.app/Contents/Info.plist
+cp -R "$BIN_DIR/Timber_Timber.bundle" dist/Timber.app/Contents/Resources/
+"""
+
+[tasks.test]
+description = "Run the TimberModel test suite"
+run = """
+set -euo pipefail
+if [ -z "${DEVELOPER_DIR:-}" ] && [ -d /Applications/Xcode.app ]; then
+  export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+fi
+swift test --disable-sandbox --cache-path /tmp/swiftpm-cache --config-path /tmp/swiftpm-config --security-path /tmp/swiftpm-security
+"""
+
+[tasks.run]
+description = "Build and open the menubar app"
+depends = ["build"]
+run = "/usr/bin/open dist/Timber.app"
+
+[tasks.package]
+description = "Build and zip the app bundle for distribution"
+depends = ["build"]
+run = """
+set -euo pipefail
+rm -f dist/Timber.zip
+ditto -c -k --sequesterRsrc --keepParent dist/Timber.app dist/Timber.zip
+"""
+
+[tasks.lint]
+description = "Run SwiftLint (strict) and SwiftFormat in lint mode"
+run = "swiftlint --strict --config .swiftlint.yaml --cache-path /tmp/swiftlint-cache && swiftformat Sources Tests --lint --cache ignore"
+
+[tasks.format]
+description = "Format Swift sources"
+run = "swiftformat Sources Tests --cache ignore"
