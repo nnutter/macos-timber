@@ -62,3 +62,14 @@ icon). That also matters for notifications: `UNUserNotificationCenter`
 traps in a raw binary, so the app posts native notifications only from
 the bundle and falls back to `osascript display notification` otherwise
 (e.g. `swift run Timber`).
+
+## Install a release download
+
+Release zips carry a universal (`arm64` + `x86_64`) build with an
+ad-hoc signature (no notarization). On first launch Gatekeeper will
+refuse a plain double-click; instead right-click (or Ctrl-click)
+`Timber.app` → Open → Open, or clear quarantine once:
+
+```sh
+xattr -d com.apple.quarantine Timber.app  # path to your copy
+```
