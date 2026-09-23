@@ -235,6 +235,25 @@ public enum TimberModel {
         "\"" + text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
     }
 
+    // MARK: - Resource bundle lookup
+
+    /// Locate `<name>.bundle` under the first candidate dir that
+    /// contains it, without trapping: unlike the synthesized
+    /// `Bundle.module` accessor (which calls fatalError when the bundle
+    /// is missing), absence yields nil so callers can degrade gracefully
+    /// (e.g. fall back to SF Symbols for icons).
+    public static func resourceBundleURL(bundleName: String, candidateDirs: [URL]) -> URL? {
+        for dir in candidateDirs {
+            let url = dir.appendingPathComponent(bundleName + ".bundle", isDirectory: true)
+            var isDirectory: ObjCBool = false
+            let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            if exists, isDirectory.boolValue {
+                return url
+            }
+        }
+        return nil
+    }
+
     // MARK: - Child process environment
 
     /// PATH handed to `timber` children. GUI apps launch with a minimal

@@ -162,6 +162,67 @@ final class TimberModelTests: XCTestCase {
         )
     }
 
+    // MARK: - resource bundle lookup
+
+    /// Fixture mirroring the v0.1.1 installed layout: a flat
+    /// `<name>.bundle` directory (PNGs at top level, no Info.plist)
+    /// that the synthesized Bundle.module failed to resolve, trapping
+    /// the popover on first open. The defensive lookup must find it.
+    func testResourceBundleURLFindsFlatBundle() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let bundle = root.appendingPathComponent("Timber_Timber.bundle", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: bundle.appendingPathComponent("zed.png").path, contents: Data())
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+
+        let found = TimberModel.resourceBundleURL(bundleName: "Timber_Timber", candidateDirs: [root])
+        XCTAssertEqual(found, bundle)
+        // And plain Foundation resolution works on what we found.
+        let loaded = found.flatMap(Bundle.init(url:))
+        XCTAssertNotNil(loaded?.url(forResource: "zed", withExtension: "png"))
+    }
+
+    func testResourceBundleURLFindsStructuredBundle() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let resources = root.appendingPathComponent("Timber_Timber.bundle/Contents/Resources", isDirectory: true)
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: resources.appendingPathComponent("zed.png").path, contents: Data())
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+
+        let found = TimberModel.resourceBundleURL(bundleName: "Timber_Timber", candidateDirs: [root])
+        XCTAssertNotNil(found)
+        XCTAssertNotNil(found.flatMap(Bundle.init(url:))?.url(forResource: "zed", withExtension: "png"))
+    }
+
+    func testResourceBundleURLReturnsNilWhenMissing() {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        XCTAssertNil(TimberModel.resourceBundleURL(bundleName: "Timber_Timber", candidateDirs: [missing]))
+        XCTAssertNil(TimberModel.resourceBundleURL(bundleName: "Timber_Timber", candidateDirs: []))
+    }
+
+    func testResourceBundleURLPrefersFirstMatch() throws {
+        let first = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let second = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        for root in [first, second] {
+            try FileManager.default.createDirectory(
+                at: root.appendingPathComponent("Timber_Timber.bundle", isDirectory: true),
+                withIntermediateDirectories: true
+            )
+        }
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: first)
+            try? FileManager.default.removeItem(at: second)
+        }
+
+        let found = TimberModel.resourceBundleURL(bundleName: "Timber_Timber", candidateDirs: [first, second])
+        XCTAssertEqual(found?.deletingLastPathComponent(), first)
+    }
+
     // MARK: - child PATH
 
     func testChildPATHPrependsMissingDirs() {
