@@ -22,13 +22,20 @@ fi
 # sandbox so it runs without an approval prompt; scratch output already
 # lives in .build.
 SWIFT_PM_FLAGS="--disable-sandbox --cache-path /tmp/swiftpm-cache --config-path /tmp/swiftpm-config --security-path /tmp/swiftpm-security"
-swift build $SWIFT_PM_FLAGS
-BIN_DIR="$(swift build $SWIFT_PM_FLAGS --show-bin-path)"
+# Plain `swift build` emits a native-arch-only binary (arm64 on current
+# runners), which cannot launch on Intel Macs. Build both slices and
+# combine them so one release zip runs everywhere. Each triple gets
+# its own scratch dir since they otherwise share one output path and
+# the second build overwrites the first.
+swift build $SWIFT_PM_FLAGS --scratch-path .build/arm64 --triple arm64-apple-macosx
+swift build $SWIFT_PM_FLAGS --scratch-path .build/x86_64 --triple x86_64-apple-macosx
+ARM_BIN="$(swift build $SWIFT_PM_FLAGS --scratch-path .build/arm64 --triple arm64-apple-macosx --show-bin-path)"
+X86_BIN="$(swift build $SWIFT_PM_FLAGS --scratch-path .build/x86_64 --triple x86_64-apple-macosx --show-bin-path)"
 rm -rf dist/TimberMenu.app dist/Timber.app
 mkdir -p dist/Timber.app/Contents/MacOS dist/Timber.app/Contents/Resources
-cp "$BIN_DIR/Timber" dist/Timber.app/Contents/MacOS/Timber
+lipo -create "$ARM_BIN/Timber" "$X86_BIN/Timber" -output dist/Timber.app/Contents/MacOS/Timber
 cp packaging/Info.plist dist/Timber.app/Contents/Info.plist
-cp -R "$BIN_DIR/Timber_Timber.bundle" dist/Timber.app/Contents/Resources/
+cp -R "$ARM_BIN/Timber_Timber.bundle" dist/Timber.app/Contents/Resources/
 # Ad-hoc sign so Gatekeeper treats a downloaded copy as an intact app
 # bundle instead of reporting it as damaged. Still unsigned for
 # Gatekeeper's notarization check, so first launch needs right-click Open.
