@@ -31,26 +31,61 @@ final class SizingHostingView<Content: View>: NSHostingView<Content> {
     }
 }
 
-/// Action icons, loaded from the bundled PNGs by explicit URL (proven to
-/// resolve) instead of named lookup, with every scale wired so Retina
-/// picks the right representation.
+/// Action icons, loaded from the bundled PNGs by explicit URL instead of
+/// named lookup, with every scale wired so Retina picks the right
+/// representation.
+///
+/// The bundle is located defensively and never via Bundle.module: its
+/// synthesized accessor calls fatalError when the bundle is missing,
+/// which crashed the popover on first open in v0.1.1. A missing bundle
+/// or missing PNG degrades to an SF Symbol instead of trapping.
 enum TimberIcons {
-    static let zed = load("zed")
-    static let herdr = load("herdr")
+    static let zed = load("zed", fallbackSystemName: "terminal")
+    static let herdr = load("herdr", fallbackSystemName: "server.rack")
 
-    private static func load(_ name: String) -> NSImage {
+    private static func load(_ name: String, fallbackSystemName: String) -> NSImage {
+        if let image = bundledImage(named: name) {
+            return image
+        }
+        return NSImage(systemSymbolName: fallbackSystemName, accessibilityDescription: name) ?? NSImage()
+    }
+
+    private static func bundledImage(named name: String) -> NSImage? {
+        let dirs = candidateDirs()
+        guard let bundleURL = TimberModel.resourceBundleURL(bundleName: "Timber_Timber", candidateDirs: dirs) else {
+            return nil
+        }
+        guard let bundle = Bundle(url: bundleURL) else {
+            return nil
+        }
         let image = NSImage()
+        var found = false
         for scale in ["@3x", "@2x", ""] {
-            guard let url = Bundle.module.url(forResource: "\(name)\(scale)", withExtension: "png"),
-                  let src = NSImage(contentsOf: url)
-            else { continue }
+            guard let url = bundle.url(forResource: "\(name)\(scale)", withExtension: "png") else { continue }
+            guard let src = NSImage(contentsOf: url) else { continue }
+            found = true
             for rep in src.representations {
                 rep.size = NSSize(width: 14, height: 14)
                 image.addRepresentation(rep)
             }
         }
+        guard found else {
+            return nil
+        }
         image.size = NSSize(width: 14, height: 14)
         return image
+    }
+
+    private static func candidateDirs() -> [URL] {
+        var dirs: [URL] = []
+        if let resources = Bundle.main.resourceURL {
+            dirs.append(resources)
+        }
+        dirs.append(Bundle.main.bundleURL)
+        if let executables = Bundle.main.executableURL?.deletingLastPathComponent() {
+            dirs.append(executables)
+        }
+        return dirs
     }
 }
 
