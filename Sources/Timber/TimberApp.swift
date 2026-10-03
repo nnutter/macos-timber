@@ -10,6 +10,36 @@ import TimberModel
 // The status item is managed with AppKit rather than MenuBarExtra so
 // left-click opens the popover while right-click shows a menu with Quit.
 
+/// Popover width bounds: the popover grows to fit long
+/// `worktree@repo` names, clamped so short lists stay usable and very
+/// long names truncate (from the middle) instead of stretching across
+/// the screen. Bounds live in TimberModel so the math stays tested;
+/// row widths inside the ScrollView do not reach the hosting view's
+/// fitting size, so the width is measured from the longest row text
+/// (including the icon cluster chrome) instead of the layout size.
+enum PopoverSizing {
+    static var minWidth: CGFloat {
+        CGFloat(TimberModel.popoverMinWidth)
+    }
+
+    static var maxWidth: CGFloat {
+        CGFloat(TimberModel.popoverMaxWidth)
+    }
+
+    /// Display string for a row, mirroring TimberRow's text.
+    static func displayString(for item: TimberItem) -> String {
+        (item.kind == .create ? "+ " : "") + item.value
+    }
+
+    static func textWidth(_ string: String) -> CGFloat {
+        (string as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: NSFont.systemFontSize)]).width
+    }
+
+    static func width(for items: [TimberItem]) -> CGFloat {
+        CGFloat(TimberModel.popoverWidth(textWidths: items.map { Double(textWidth(displayString(for: $0))) }))
+    }
+}
+
 /// NSHostingView that keeps its NSPopover sized to the SwiftUI content.
 /// Without this the popover opens at a pre-layout size (clipping rows)
 /// and only reaches full size on a later open, after layout has resolved.
@@ -95,7 +125,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let state = TimberState()
     private var refreshTimer: Timer?
 
-    private let popoverWidth: CGFloat = 400
     private let backgroundRefreshInterval: TimeInterval = 60
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -117,12 +146,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let popover = NSPopover()
         popover.behavior = .transient
         popover.contentViewController = viewController
-        popover.contentSize = NSSize(width: popoverWidth, height: 160)
-        hostingView.onLayout = { [weak popover, popoverWidth] size in
-            guard let popover, popover.isShown, size.height > 0,
-                  abs(popover.contentSize.height - size.height) > 0.5
+        popover.contentSize = NSSize(width: PopoverSizing.minWidth, height: 160)
+        let state = state
+        hostingView.onLayout = { [weak popover, state] size in
+            guard let popover, popover.isShown, size.height > 0 else { return }
+            // Height follows the SwiftUI layout; width follows the
+            // longest measured row (ScrollView rows never widen the
+            // fitting size, so fittingSize.width stays near the minimum
+            // and truncates rows early if trusted).
+            let width = PopoverSizing.width(for: state.items)
+            guard abs(popover.contentSize.height - size.height) > 0.5
+                || abs(popover.contentSize.width - width) > 0.5
             else { return }
-            popover.contentSize = NSSize(width: popoverWidth, height: size.height)
+            popover.contentSize = NSSize(width: width, height: size.height)
         }
         self.popover = popover
 
@@ -161,6 +197,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // never blanks out or visibly reloads on open.
             state.presentFromCache()
             state.refreshInBackground()
+            // Pre-size to the cached rows so the first frame never
+            // flashes narrow; onLayout keeps height (and width, as the
+            // filter narrows the list) in sync afterwards.
+            popover.contentSize.width = PopoverSizing.width(for: state.items)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
@@ -182,202 +222,3 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 // Note: there is deliberately no SwiftUI App scene here. The entry point
 // is main.swift (plain AppKit lifecycle); a Settings scene would open a
 // blank window at launch.
-
-// MARK: - Views
-
-struct TimberPopover: View {
-    @ObservedObject var state: TimberState
-    @FocusState private var filterFocused: Bool
-    @FocusState private var formFocused: Bool
-
-    private let maxRows = 8
-    private let rowHeight: CGFloat = 32
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                TextField("type worktree@repo", text: $state.filter)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($filterFocused)
-                    .onSubmit { state.primaryAction() }
-                    .onChange(of: state.filter) { _, _ in state.filterChanged() }
-                    .disabled(state.busy)
-
-                if state.busy {
-                    ProgressView()
-                        .scaleEffect(0.6)
-                        .frame(width: 20, height: 20)
-                }
-
-                Button(state.repoFormOpen ? "−" : "+") {
-                    state.repoFormOpen.toggle()
-                }
-                .help(state.repoFormOpen ? "Close repository form" : "Add repository (timber repo add)")
-                .disabled(state.busy)
-            }
-
-            if state.repoFormOpen {
-                TextField("Remote URL or path", text: $state.repoURL)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($formFocused)
-                    .onSubmit { state.submitRepoForm() }
-                    .disabled(state.busy)
-                TextField("Name (optional, derived from URL)", text: $state.repoName)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($formFocused)
-                    .onSubmit { state.submitRepoForm() }
-                    .disabled(state.busy)
-                HStack(spacing: 8) {
-                    Button(state.busy ? "Adding…" : "Add repository") {
-                        state.submitRepoForm()
-                    }
-                    .disabled(state.busy)
-                    Button("Cancel") {
-                        state.repoFormOpen = false
-                    }
-                    .disabled(state.busy)
-                }
-            }
-
-            if state.listing {
-                Text("Loading worktrees…")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            } else if state.items.isEmpty {
-                Text(state.worktrees.isEmpty
-                    ? "No worktrees yet — type name@repo to create one"
-                    : "No matches")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .multilineTextAlignment(.center)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 4) {
-                        ForEach(state.items) { item in
-                            TimberRow(state: state, item: item)
-                        }
-                    }
-                }
-                .frame(maxHeight: CGFloat(maxRows) * rowHeight)
-            }
-        }
-        .padding()
-        .frame(width: 400)
-        .onAppear {
-            filterFocused = true
-        }
-        .onKeyPress(.upArrow) { state.move(-1); return .handled }
-        .onKeyPress(.downArrow) { state.move(1); return .handled }
-        .onKeyPress(.escape) {
-            if formFocused {
-                return .ignored
-            }
-            if state.repoFormOpen {
-                state.repoFormOpen = false
-            } else if !state.filter.isEmpty {
-                state.clearFilter()
-            }
-            return .handled
-        }
-        .onKeyPress(characters: CharacterSet(charactersIn: "u"), phases: .down) { press in
-            guard press.modifiers == .control, !formFocused else { return .ignored }
-            state.clearFilter()
-            return .handled
-        }
-    }
-}
-
-struct TimberRow: View {
-    @ObservedObject var state: TimberState
-    let item: TimberItem
-
-    private var selected: Bool {
-        state.cursorActive && state.selectedID == item.id
-    }
-
-    private var armed: Bool {
-        state.armedRemoveValue == item.value
-    }
-
-    private let iconBox: CGFloat = 22
-    private let iconSize: CGFloat = 14
-
-    var body: some View {
-        HStack(spacing: 6) {
-            RoundedRectangle(cornerRadius: 1.5)
-                .fill(Color.accentColor)
-                .frame(width: 3, height: 20)
-                .opacity(selected ? 1 : 0)
-
-            Text((item.kind == .create ? "+ " : "") + item.value)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .opacity(item.kind == .create && !selected ? 0.72 : 1)
-
-            Spacer(minLength: 8)
-
-            // The action cluster is always in the layout (hidden when the
-            // row is not selected) so the popover width never jumps and
-            // the window never clips the row when buttons appear.
-            HStack(spacing: 4) {
-                Button {
-                    state.openInZed(item)
-                } label: {
-                    Image(nsImage: TimberIcons.zed)
-                        .renderingMode(.template)
-                        .resizable()
-                        .frame(width: iconSize, height: iconSize)
-                        .foregroundStyle(.primary)
-                }
-                .buttonStyle(.plain)
-                .frame(width: iconBox, height: iconBox)
-                .help(item.kind == .open ? "Open in Zed" : "Create and open in Zed")
-
-                Button {
-                    state.openInHerdr(item)
-                } label: {
-                    Image(nsImage: TimberIcons.herdr)
-                        .renderingMode(.template)
-                        .resizable()
-                        .frame(width: iconSize, height: iconSize)
-                        .foregroundStyle(.primary)
-                }
-                .buttonStyle(.plain)
-                .frame(width: iconBox, height: iconBox)
-                .help(item.kind == .open ? "Open in Herdr" : "Create in Herdr")
-
-                if item.kind == .open {
-                    Button {
-                        state.armOrRemove(item)
-                    } label: {
-                        Image(systemName: "trash")
-                            .frame(width: iconSize, height: iconSize)
-                    }
-                    .buttonStyle(.plain)
-                    .frame(width: iconBox, height: iconBox)
-                    .foregroundStyle(armed ? .red : .primary)
-                    .help(armed ? "Click again to remove \(item.value)" : "Remove \(item.value)")
-                } else {
-                    // Invisible placeholder keeps the cluster width stable.
-                    Image(systemName: "trash")
-                        .frame(width: iconSize, height: iconSize)
-                        .frame(width: iconBox, height: iconBox)
-                        .opacity(0)
-                }
-            }
-            .layoutPriority(1)
-            .opacity(selected ? 1 : 0)
-            .disabled(!selected || state.busy)
-        }
-        .frame(height: 32)
-        .contentShape(Rectangle())
-        .onHover { hovering in
-            if hovering {
-                state.select(id: item.id)
-            }
-        }
-        .onTapGesture {
-            state.clickActivate(item)
-        }
-    }
-}
