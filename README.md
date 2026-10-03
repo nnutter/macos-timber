@@ -20,7 +20,8 @@ managed Git worktrees. Requires the `timber` CLI and an Xcode toolchain.
 - Failures post a macOS notification; never silently.
 - Keyboard: Up/Down move, Return activates, Esc closes form / clears
   filter, Ctrl+U clears.
-- Right-click (or Ctrl-click) the menubar icon for a Quit menu;
+- Right-click (or Ctrl-click) the menubar icon for an Open at Login toggle
+  and Quit;
   left-click toggles the popover.
 
 Notes on parity: enumeration is implemented natively with FileManager

@@ -210,12 +210,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button, let popover else { return }
         popover.performClose(nil)
         let menu = NSMenu()
+        let loginItem = NSMenuItem(
+            title: "Open at Login",
+            action: #selector(toggleOpenAtLogin(_:)),
+            keyEquivalent: ""
+        )
+        loginItem.target = self
+        loginItem.state = TimberLoginItem.isEnabled ? .on : .off
+        menu.addItem(loginItem)
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(
             title: "Quit Timber",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         ))
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
+    }
+
+    @objc private func toggleOpenAtLogin(_ sender: NSMenuItem) {
+        let enabled = sender.state != .on
+        do {
+            try TimberLoginItem.setEnabled(enabled)
+            sender.state = enabled ? .on : .off
+        } catch {
+            TimberCommand.notify(
+                subject: enabled ? "open at login" : "remove from login",
+                detail: error.localizedDescription,
+                failure: true
+            )
+        }
     }
 }
 
