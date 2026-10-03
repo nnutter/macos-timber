@@ -1,0 +1,106 @@
+{
+  "fill-specializations" : [
+    {
+      "value" : {
+        "linear-gradient" : [
+          "display-p3:0.05490,0.14118,0.38824,1.00000",
+          "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+        ]
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : {
+        "linear-gradient" : [
+          "extended-gray:0.00000,1.00000",
+          "display-p3:0.05490,0.14118,0.38824,1.00000"
+        ]
+      }
+    }
+  ],
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "08-branch-base.svg",
+          "name" : "08-branch-base"
+        },
+        {
+          "image-name" : "07-branch-teal.svg",
+          "name" : "07-branch-teal"
+        },
+        {
+          "image-name" : "06-branch-blue.svg",
+          "name" : "06-branch-blue"
+        },
+        {
+          "image-name" : "05-branch-orange.svg",
+          "name" : "05-branch-orange"
+        }
+      ],
+      "name" : "03 Worktree Branches",
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.35
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.05
+      }
+    },
+    {
+      "layers" : [
+        {
+          "image-name" : "04-git-mark.svg",
+          "name" : "04-git-mark"
+        },
+        {
+          "image-name" : "03-front-folder.svg",
+          "name" : "03-front-folder"
+        }
+      ],
+      "lighting" : "combined",
+      "name" : "02 Repository",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.1
+      }
+    },
+    {
+      "layers" : [
+        {
+          "image-name" : "02-rear-teal.svg",
+          "name" : "02-rear-teal"
+        },
+        {
+          "image-name" : "01-rear-blue.svg",
+          "name" : "01-rear-blue"
+        }
+      ],
+      "name" : "01 Rear Worktrees",
+      "refractivity" : {
+        "depth" : 0,
+        "enabled" : false,
+        "strength" : 0.5
+      },
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.35
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.15
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
