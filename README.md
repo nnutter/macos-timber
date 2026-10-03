@@ -42,6 +42,9 @@ globstar script, since macOS ships bash 3.2. `timber repo add` here has no
   and whitened so both render as monochrome template images).
 - `Sources/TimberModel/TimberModel.swift` — pure filter/argv logic ported
   from `TimberModel.js`, UI-independent.
+- `Assets/AppIcon.icon/` — Icon Composer source for the app icon;
+  `mise run build` compiles it to `Assets.car` via `actool`, and
+  `CFBundleIconName` in `packaging/Info.plist` points at it.
 - `Tests/TimberModelTests/` — unit tests for the model.
 
 ## Build & run

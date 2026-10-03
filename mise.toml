@@ -36,6 +36,14 @@ mkdir -p dist/Timber.app/Contents/MacOS dist/Timber.app/Contents/Resources
 lipo -create "$ARM_BIN/Timber" "$X86_BIN/Timber" -output dist/Timber.app/Contents/MacOS/Timber
 cp packaging/Info.plist dist/Timber.app/Contents/Info.plist
 cp -R "$ARM_BIN/Timber_Timber.bundle" dist/Timber.app/Contents/Resources/
+# Compile the Icon Composer source into Assets.car so the bundle gets a
+# real app icon (CFBundleIconName in Info.plist points at it). actool
+# exits nonzero on failure, and set -e stops the build there; its plist
+# report goes to a log so success stays quiet.
+ACTOOL_OUT="$(mktemp -d /tmp/timber-assets.XXXXXX)"
+xcrun actool --compile "$ACTOOL_OUT" --platform macosx --minimum-deployment-target 14.0 Assets/AppIcon.icon > "$ACTOOL_OUT/actool.log"
+cp "$ACTOOL_OUT"/Assets.car dist/Timber.app/Contents/Resources/
+rm -rf "$ACTOOL_OUT"
 # Ad-hoc sign so Gatekeeper treats a downloaded copy as an intact app
 # bundle instead of reporting it as damaged. Still unsigned for
 # Gatekeeper's notarization check, so first launch needs right-click Open.
