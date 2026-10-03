@@ -9,6 +9,15 @@ _.path = [
   "~/.local/bin",
 ]
 
+[tasks.on-stop]
+description = "Stop hook: format, lint, and test"
+run = """
+set -euo pipefail
+mise run format
+mise run lint
+mise run test
+"""
+
 [tasks.build]
 description = "Build dist/Timber.app via SwiftPM"
 run = """

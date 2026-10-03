@@ -202,6 +202,30 @@ public enum TimberModel {
         return args
     }
 
+    // MARK: - Popover sizing
+
+    /// Width bounds for the popover. The popover grows to fit long
+    /// `worktree@repo` names so rows truncate only after hitting max.
+    public static let popoverMinWidth: Double = 300
+    public static let popoverMaxWidth: Double = 600
+
+    /// Fixed chrome around the row text, kept next to the row layout it
+    /// mirrors (TimberRow + popover padding) so the two stay in sync:
+    /// selection bar (3) + row gaps (3 x 6) + spacer minimum (8) +
+    /// icon cluster (3 x 22 boxes + 2 x 4 spacing) + popover padding
+    /// (2 x 16) + slop for font-rendering differences (8).
+    public static let popoverChromeWidth: Double = 3 + 18 + 8 + 74 + 32 + 8
+
+    /// Content-driven popover width: the widest row text plus chrome,
+    /// clamped to the bounds. Widths inside a ScrollView do not
+    /// propagate to the hosting view's fitting size, so callers measure
+    /// the longest row text (e.g. via NSString sizing) and pass those
+    /// widths here instead of trusting the layout size.
+    public static func popoverWidth(textWidths: [Double]) -> Double {
+        guard let maxText = textWidths.max() else { return popoverMinWidth }
+        return min(max(maxText + popoverChromeWidth, popoverMinWidth), popoverMaxWidth)
+    }
+
     // MARK: - Status-item clicks
 
     /// Left-click toggles the popover; right-click (or Ctrl-click) shows

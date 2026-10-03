@@ -115,6 +115,33 @@ final class TimberModelTests: XCTestCase {
         }
     }
 
+    // MARK: - popover sizing
+
+    func testPopoverWidthEmptyStaysAtMin() {
+        XCTAssertEqual(TimberModel.popoverWidth(textWidths: []), TimberModel.popoverMinWidth)
+    }
+
+    func testPopoverWidthShortTextStaysAtMin() {
+        // A short name plus chrome still fits inside the minimum.
+        XCTAssertEqual(TimberModel.popoverWidth(textWidths: [50]), TimberModel.popoverMinWidth)
+    }
+
+    func testPopoverWidthGrowsWithLongestRow() {
+        // Widest row drives the width, including room for the icon
+        // cluster via the chrome constant.
+        let width = TimberModel.popoverWidth(textWidths: [100, 250, 180])
+        XCTAssertEqual(width, 250 + TimberModel.popoverChromeWidth)
+        XCTAssertGreaterThan(width, TimberModel.popoverMinWidth)
+        XCTAssertLessThan(width, TimberModel.popoverMaxWidth)
+    }
+
+    func testPopoverWidthClampsAtMax() {
+        XCTAssertEqual(
+            TimberModel.popoverWidth(textWidths: [10000]),
+            TimberModel.popoverMaxWidth
+        )
+    }
+
     // MARK: - status-item clicks
 
     func testSecondaryClickShowsContextMenu() {
