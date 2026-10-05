@@ -39,6 +39,16 @@ struct TimberPopover: View {
                 .disabled(state.busy)
             }
 
+            Picker("Sort", selection: $state.sort) {
+                ForEach(TimberModel.SortMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .help("Sort worktrees (timber list --sort)")
+            .onChange(of: state.sort) { _, _ in state.rebuild() }
+
             if state.repoFormOpen {
                 TextField("Remote URL or path", text: $state.repoURL)
                     .textFieldStyle(.roundedBorder)

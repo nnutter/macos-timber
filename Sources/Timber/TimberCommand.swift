@@ -105,6 +105,7 @@ enum TimberCommand {
 
         let root = ProcessInfo.processInfo.environment["TIMBER_WORKTREE_ROOT"]
             ?? fm.homeDirectoryForCurrentUser.appendingPathComponent("worktrees").path
+        let gitExe = findExecutable("git")
         var worktrees: [TimberWorktree] = []
         for repo in repoNames {
             let base = URL(fileURLWithPath: root).appendingPathComponent(repo)
@@ -114,10 +115,32 @@ enum TimberCommand {
                     ? String(parent.path.dropFirst(base.path.count + 1))
                     : ""
                 guard !rel.isEmpty else { continue }
-                worktrees.append(TimberWorktree(name: rel, repo: repo, path: dir.path))
+                worktrees.append(TimberWorktree(
+                    name: rel,
+                    repo: repo,
+                    path: dir.path,
+                    lastCommitAt: commitDate(atPath: dir.path, gitExe: gitExe)
+                ))
             }
         }
         return (repoNames.map { TimberRepo(name: $0) }, worktrees.sorted { $0.value < $1.value })
+    }
+
+    /// Newest commit date for recency sorting, falling back to the
+    /// worktree directory mtime when git is missing or fails.
+    private static func commitDate(atPath path: String, gitExe: URL?) -> Date? {
+        if let stamp = gitTimestamp(atPath: path, gitExe: gitExe) {
+            return Date(timeIntervalSince1970: stamp)
+        }
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path) else { return nil }
+        return attrs[.modificationDate] as? Date
+    }
+
+    private static func gitTimestamp(atPath path: String, gitExe: URL?) -> Double? {
+        guard let gitExe else { return nil }
+        guard let result = try? run(gitExe, args: ["-C", path, "log", "-1", "--format=%ct"]) else { return nil }
+        guard result.code == 0 else { return nil }
+        return Double(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     /// Directories named `name` containing a `.git` entry, up to maxDepth
