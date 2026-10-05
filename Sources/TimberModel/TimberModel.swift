@@ -15,10 +15,13 @@ public struct TimberWorktree: Equatable {
     public let name: String
     public let repo: String
     public let path: String
-    public init(name: String, repo: String, path: String) {
+    /// Newest commit date for recency sorting; nil when unknown.
+    public let lastCommitAt: Date?
+    public init(name: String, repo: String, path: String, lastCommitAt: Date? = nil) {
         self.name = name
         self.repo = repo
         self.path = path
+        self.lastCommitAt = lastCommitAt
     }
 }
 
@@ -51,6 +54,65 @@ public struct TimberItem: Equatable, Identifiable {
 }
 
 public enum TimberModel {
+    // MARK: - Sort
+
+    /// Sort modes mirroring `timber list --sort`: recency (newest
+    /// commit first), repo, or worktree name.
+    public enum SortMode: String, CaseIterable, Identifiable {
+        case recency
+        case repo
+        case worktree
+
+        public var id: String {
+            rawValue
+        }
+
+        public var label: String {
+            switch self {
+            case .recency: "Recency"
+            case .repo: "Repo"
+            case .worktree: "Worktree"
+            }
+        }
+    }
+
+    /// Sort worktrees for display. Recency falls back to `name@repo`
+    /// when commit dates are missing or tied.
+    public static func sortWorktrees(_ worktrees: [TimberWorktree], mode: SortMode) -> [TimberWorktree] {
+        switch mode {
+        case .recency:
+            worktrees.sorted {
+                switch ($0.lastCommitAt, $1.lastCommitAt) {
+                case let (lhs?, rhs?):
+                    if lhs != rhs {
+                        return lhs > rhs
+                    }
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                case (nil, nil):
+                    break
+                }
+                return worktreeValue(name: $0.name, repo: $0.repo) < worktreeValue(name: $1.name, repo: $1.repo)
+            }
+        case .repo:
+            worktrees.sorted {
+                if $0.repo != $1.repo {
+                    return $0.repo < $1.repo
+                }
+                return $0.name < $1.name
+            }
+        case .worktree:
+            worktrees.sorted {
+                if $0.name != $1.name {
+                    return $0.name < $1.name
+                }
+                return $0.repo < $1.repo
+            }
+        }
+    }
+
     // MARK: - Values
 
     /// Split "name@repo" on the LAST "@". Returns nil unless qualified
@@ -140,11 +202,12 @@ public enum TimberModel {
     public static func itemsForTerm(
         repos: [TimberRepo],
         worktrees: [TimberWorktree],
-        term: String
+        term: String,
+        sort: SortMode = .recency
     ) -> [TimberItem] {
         var items: [TimberItem] = []
-        for rank in filterWorktrees(term, worktrees: worktrees) {
-            let worktree = worktrees[rank]
+        let ranked = filterWorktrees(term, worktrees: worktrees).map { worktrees[$0] }
+        for worktree in sortWorktrees(ranked, mode: sort) {
             let value = worktreeValue(name: worktree.name, repo: worktree.repo)
             let item = TimberItem(
                 kind: .open, name: worktree.name, repo: worktree.repo, value: value, path: worktree.path

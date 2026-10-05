@@ -21,6 +21,7 @@ final class TimberState: ObservableObject {
     @Published var repoName = ""
     @Published var busy = false
     @Published var listing = true
+    @Published var sort: TimberModel.SortMode = .recency
 
     func onMain(_ work: @escaping () -> Void) {
         if Thread.isMainThread {
@@ -96,7 +97,7 @@ final class TimberState: ObservableObject {
     func rebuild() {
         // Any list change disarms a pending delete.
         armedRemoveValue = ""
-        items = TimberModel.itemsForTerm(repos: repos, worktrees: worktrees, term: filter)
+        items = TimberModel.itemsForTerm(repos: repos, worktrees: worktrees, term: filter, sort: sort)
         if let id = selectedID, items.contains(where: { $0.id == id }) {
             return
         }
