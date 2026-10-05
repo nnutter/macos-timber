@@ -26,9 +26,17 @@ enum PopoverSizing {
         CGFloat(TimberModel.popoverMaxWidth)
     }
 
-    /// Display string for a row, mirroring TimberRow's text.
+    /// Display string for a row, mirroring TimberRow's text (value plus
+    /// the Status/Todo badges) so the measured width covers them.
     static func displayString(for item: TimberItem) -> String {
-        (item.kind == .create ? "+ " : "") + item.value
+        var text = (item.kind == .create ? "+ " : "") + item.value
+        if !item.statusText.isEmpty {
+            text += " " + item.statusText
+        }
+        if !item.todoText.isEmpty {
+            text += " " + item.todoText
+        }
+        return text
     }
 
     static func textWidth(_ string: String) -> CGFloat {

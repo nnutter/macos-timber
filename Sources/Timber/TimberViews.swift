@@ -149,6 +149,24 @@ struct TimberRow: View {
 
             Spacer(minLength: 8)
 
+            // Status/Todo badges from `timber ls`, shown on every row
+            // (not just the selected one). They sit outside the action
+            // cluster so they never hide; like the cluster they outrank
+            // the value text, which truncates (from the middle) first.
+            HStack(spacing: 4) {
+                if !item.statusText.isEmpty {
+                    Text(item.statusText)
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                }
+                if !item.todoText.isEmpty {
+                    Text(item.todoText)
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .layoutPriority(1)
+
             // The action cluster is always in the layout (hidden when the
             // row is not selected) so the popover width never jumps and
             // the window never clips the row when buttons appear.
