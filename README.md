@@ -6,7 +6,9 @@ managed Git worktrees. Requires the `timber` CLI and an Xcode toolchain.
 
 ## Behavior (mirrors Panel.qml)
 
-- Popover lists existing worktrees as `name@repo` rows, with a fuzzy filter
+- Popover lists existing worktrees as `name@repo` rows (plus the `timber ls`
+  Status and Todo badges — the `[<upstream>]` suffix is omitted, and Todo
+  hides when the worktree has no checklist items), with a fuzzy filter
   field (`type worktree@repo`). `@` narrows by repo, e.g. `f@scribble`.
 - Typing a qualified `name@repo` that does not exist yet offers a `+` row
   to create it (`timber create --no-herdr`), then opens it in Zed.

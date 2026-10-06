@@ -81,12 +81,29 @@ enum TimberCommand {
 
     // MARK: - Enumeration
 
+    /// Status/Todo details for known worktrees, keyed by `name@repo`.
+    /// Empty when `timber list --json` fails: the filesystem scan below
+    /// stays the source of truth for membership, so one unreadable
+    /// worktree hides its badges instead of failing the whole listing.
+    static func listDetails() -> [String: TimberListDetail] {
+        guard let result = try? runTimber(["list", "--json"]), result.code == 0,
+              let data = result.stdout.data(using: .utf8),
+              let rows = try? JSONDecoder().decode([TimberListDetail].self, from: data)
+        else { return [:] }
+        var details: [String: TimberListDetail] = [:]
+        for row in rows {
+            details[TimberModel.worktreeValue(name: row.name, repo: row.repo)] = row
+        }
+        return details
+    }
+
     /// Same enumeration timber's own zsh completion uses: registered repo
     /// names plus a scan of the worktree root for `<root>/<repo>/**/<repo>`
-    /// directories containing `.git`. `timber list` is avoided on purpose —
-    /// its styled table still emits ANSI under NO_COLOR and it enriches
-    /// every row with git status, so one missing worktree directory fails
-    /// the whole listing.
+    /// directories containing `.git`. The scan (not `timber list`) owns
+    /// membership: its styled table still emits ANSI under NO_COLOR and it
+    /// enriches every row with git status, so one missing worktree
+    /// directory fails the whole listing. `timber list --json` only
+    /// enriches scanned rows with Status/Todo details.
     static func enumerate() -> (repos: [TimberRepo], worktrees: [TimberWorktree]) {
         let fm = FileManager.default
         var repoNames: [String] = []
@@ -106,6 +123,7 @@ enum TimberCommand {
         let root = ProcessInfo.processInfo.environment["TIMBER_WORKTREE_ROOT"]
             ?? fm.homeDirectoryForCurrentUser.appendingPathComponent("worktrees").path
         let gitExe = findExecutable("git")
+        let details = listDetails()
         var worktrees: [TimberWorktree] = []
         for repo in repoNames {
             let base = URL(fileURLWithPath: root).appendingPathComponent(repo)
@@ -115,11 +133,18 @@ enum TimberCommand {
                     ? String(parent.path.dropFirst(base.path.count + 1))
                     : ""
                 guard !rel.isEmpty else { continue }
+                let detail = details[TimberModel.worktreeValue(name: rel, repo: repo)]
                 worktrees.append(TimberWorktree(
                     name: rel,
                     repo: repo,
                     path: dir.path,
-                    lastCommitAt: commitDate(atPath: dir.path, gitExe: gitExe)
+                    lastCommitAt: commitDate(atPath: dir.path, gitExe: gitExe),
+                    ahead: detail?.ahead ?? 0,
+                    behind: detail?.behind ?? 0,
+                    merged: detail?.merged ?? false,
+                    statusError: detail?.statusError ?? false,
+                    todoDone: detail?.todoDone ?? 0,
+                    todoTotal: detail?.todoTotal ?? 0
                 ))
             }
         }
@@ -225,5 +250,36 @@ enum TimberCommand {
 private extension TimberWorktree {
     var value: String {
         TimberModel.worktreeValue(name: name, repo: repo)
+    }
+}
+
+/// One `timber list --json` row: the Status/Todo columns for a worktree.
+/// File scope (not nested in TimberCommand) for the nesting lint.
+/// Decodes defensively (missing keys default) so a newer or older timber
+/// still enriches rows instead of failing the parse.
+struct TimberListDetail: Decodable {
+    var name = ""
+    var repo = ""
+    var ahead = 0
+    var behind = 0
+    var merged = false
+    var statusError = false
+    var todoDone = 0
+    var todoTotal = 0
+
+    enum CodingKeys: String, CodingKey {
+        case name, repo, ahead, behind, merged, statusError, todoDone, todoTotal
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = (try? container.decode(String.self, forKey: .name)) ?? ""
+        repo = (try? container.decode(String.self, forKey: .repo)) ?? ""
+        ahead = (try? container.decode(Int.self, forKey: .ahead)) ?? 0
+        behind = (try? container.decode(Int.self, forKey: .behind)) ?? 0
+        merged = (try? container.decode(Bool.self, forKey: .merged)) ?? false
+        statusError = (try? container.decode(Bool.self, forKey: .statusError)) ?? false
+        todoDone = (try? container.decode(Int.self, forKey: .todoDone)) ?? 0
+        todoTotal = (try? container.decode(Int.self, forKey: .todoTotal)) ?? 0
     }
 }

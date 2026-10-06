@@ -111,6 +111,12 @@ final class TimberState: ObservableObject {
         armedRemoveValue = ""
     }
 
+    /// Mouse left the row list: dim all rows. Arrow keys re-arm via move.
+    func hoverExited() {
+        cursorActive = false
+        armedRemoveValue = ""
+    }
+
     func move(_ delta: Int) {
         guard !items.isEmpty else { return }
         if !cursorActive {

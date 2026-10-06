@@ -17,11 +17,29 @@ public struct TimberWorktree: Equatable {
     public let path: String
     /// Newest commit date for recency sorting; nil when unknown.
     public let lastCommitAt: Date?
-    public init(name: String, repo: String, path: String, lastCommitAt: Date? = nil) {
+    /// Ahead/behind vs upstream (`timber list --json`).
+    public let ahead: Int
+    public let behind: Int
+    /// Branch merged to its upstream, from `timber list --json`.
+    public let merged: Bool
+    /// Unreadable git status / TODO.md progress (`timber list --json`).
+    public let statusError: Bool
+    public let todoDone: Int
+    public let todoTotal: Int
+    public init(
+        name: String, repo: String, path: String, lastCommitAt: Date? = nil, ahead: Int = 0, behind: Int = 0,
+        merged: Bool = false, statusError: Bool = false, todoDone: Int = 0, todoTotal: Int = 0
+    ) {
         self.name = name
         self.repo = repo
         self.path = path
         self.lastCommitAt = lastCommitAt
+        self.ahead = ahead
+        self.behind = behind
+        self.merged = merged
+        self.statusError = statusError
+        self.todoDone = todoDone
+        self.todoTotal = todoTotal
     }
 }
 
@@ -44,12 +62,21 @@ public struct TimberItem: Equatable, Identifiable {
     public let value: String
     /// Worktree path for `.open` rows, empty for `.create` rows.
     public let path: String
-    public init(kind: Kind, name: String, repo: String, value: String, path: String) {
+    /// `timber ls` Status (no `[upstream]`); empty when in sync.
+    public let statusText: String
+    /// `timber ls` Todo (`done/total`); empty without checklist items.
+    public let todoText: String
+    public init(
+        kind: Kind, name: String, repo: String, value: String, path: String, statusText: String = "",
+        todoText: String = ""
+    ) {
         self.kind = kind
         self.name = name
         self.repo = repo
         self.value = value
         self.path = path
+        self.statusText = statusText
+        self.todoText = todoText
     }
 }
 
@@ -209,8 +236,13 @@ public enum TimberModel {
         let ranked = filterWorktrees(term, worktrees: worktrees).map { worktrees[$0] }
         for worktree in sortWorktrees(ranked, mode: sort) {
             let value = worktreeValue(name: worktree.name, repo: worktree.repo)
+            let status = listStatusText(
+                merged: worktree.merged, ahead: worktree.ahead, behind: worktree.behind,
+                statusError: worktree.statusError
+            )
             let item = TimberItem(
-                kind: .open, name: worktree.name, repo: worktree.repo, value: value, path: worktree.path
+                kind: .open, name: worktree.name, repo: worktree.repo, value: value, path: worktree.path,
+                statusText: status, todoText: todoText(done: worktree.todoDone, total: worktree.todoTotal)
             )
             items.append(item)
         }

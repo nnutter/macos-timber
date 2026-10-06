@@ -39,15 +39,20 @@ struct TimberPopover: View {
                 .disabled(state.busy)
             }
 
-            Picker("Sort", selection: $state.sort) {
-                ForEach(TimberModel.SortMode.allCases) { mode in
-                    Text(mode.label).tag(mode)
+            HStack {
+                Spacer(minLength: 0)
+                Picker("Sort", selection: $state.sort) {
+                    ForEach(TimberModel.SortMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("Sort worktrees (timber list --sort)")
+                .onChange(of: state.sort) { _, _ in state.rebuild() }
+                Spacer(minLength: 0)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .help("Sort worktrees (timber list --sort)")
-            .onChange(of: state.sort) { _, _ in state.rebuild() }
 
             if state.repoFormOpen {
                 TextField("Remote URL or path", text: $state.repoURL)
@@ -92,6 +97,11 @@ struct TimberPopover: View {
                     }
                 }
                 .frame(maxHeight: CGFloat(maxRows) * rowHeight)
+                .onHover { hovering in
+                    if !hovering {
+                        state.hoverExited()
+                    }
+                }
             }
         }
         .padding()
@@ -149,9 +159,28 @@ struct TimberRow: View {
 
             Spacer(minLength: 8)
 
-            // The action cluster is always in the layout (hidden when the
-            // row is not selected) so the popover width never jumps and
-            // the window never clips the row when buttons appear.
+            // Status/Todo badges from `timber ls`, shown on every row
+            // (not just the selected one). They sit outside the action
+            // cluster so they never hide; like the cluster they outrank
+            // the value text, which truncates (from the middle) first.
+            HStack(spacing: 4) {
+                if !item.statusText.isEmpty {
+                    Text(item.statusText)
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                }
+                if !item.todoText.isEmpty {
+                    Text(item.todoText)
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .layoutPriority(1)
+
+            // The action cluster is always in the layout (faded to 20%
+            // when the row is not selected) so the popover width never
+            // jumps and the window never clips the row when buttons
+            // appear, while still making the hovered row obvious.
             HStack(spacing: 4) {
                 Button {
                     state.openInZed(item)
@@ -199,7 +228,7 @@ struct TimberRow: View {
                 }
             }
             .layoutPriority(1)
-            .opacity(selected ? 1 : 0)
+            .opacity(selected ? 1 : 0.2)
             .disabled(!selected || state.busy)
         }
         .frame(height: 32)
