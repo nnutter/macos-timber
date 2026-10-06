@@ -97,6 +97,11 @@ struct TimberPopover: View {
                     }
                 }
                 .frame(maxHeight: CGFloat(maxRows) * rowHeight)
+                .onHover { hovering in
+                    if !hovering {
+                        state.hoverExited()
+                    }
+                }
             }
         }
         .padding()
@@ -172,7 +177,7 @@ struct TimberRow: View {
             }
             .layoutPriority(1)
 
-            // The action cluster is always in the layout (faded to 15%
+            // The action cluster is always in the layout (faded to 20%
             // when the row is not selected) so the popover width never
             // jumps and the window never clips the row when buttons
             // appear, while still making the hovered row obvious.
@@ -223,7 +228,7 @@ struct TimberRow: View {
                 }
             }
             .layoutPriority(1)
-            .opacity(selected ? 1 : 0.15)
+            .opacity(selected ? 1 : 0.2)
             .disabled(!selected || state.busy)
         }
         .frame(height: 32)
