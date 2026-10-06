@@ -39,15 +39,20 @@ struct TimberPopover: View {
                 .disabled(state.busy)
             }
 
-            Picker("Sort", selection: $state.sort) {
-                ForEach(TimberModel.SortMode.allCases) { mode in
-                    Text(mode.label).tag(mode)
+            HStack {
+                Spacer(minLength: 0)
+                Picker("Sort", selection: $state.sort) {
+                    ForEach(TimberModel.SortMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("Sort worktrees (timber list --sort)")
+                .onChange(of: state.sort) { _, _ in state.rebuild() }
+                Spacer(minLength: 0)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .help("Sort worktrees (timber list --sort)")
-            .onChange(of: state.sort) { _, _ in state.rebuild() }
 
             if state.repoFormOpen {
                 TextField("Remote URL or path", text: $state.repoURL)
@@ -167,9 +172,10 @@ struct TimberRow: View {
             }
             .layoutPriority(1)
 
-            // The action cluster is always in the layout (hidden when the
-            // row is not selected) so the popover width never jumps and
-            // the window never clips the row when buttons appear.
+            // The action cluster is always in the layout (faded to 15%
+            // when the row is not selected) so the popover width never
+            // jumps and the window never clips the row when buttons
+            // appear, while still making the hovered row obvious.
             HStack(spacing: 4) {
                 Button {
                     state.openInZed(item)
@@ -217,7 +223,7 @@ struct TimberRow: View {
                 }
             }
             .layoutPriority(1)
-            .opacity(selected ? 1 : 0)
+            .opacity(selected ? 1 : 0.15)
             .disabled(!selected || state.busy)
         }
         .frame(height: 32)
