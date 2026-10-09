@@ -105,7 +105,8 @@ extension TimberState {
                 self.onMain {
                     self.busy = false
                     if result.code == 0 {
-                        self.refresh()
+                        self.worktrees.removeAll { $0.name == item.name && $0.repo == item.repo }
+                        self.rebuild()
                     } else {
                         TimberCommand.notify(
                             subject: "worktree remove",
