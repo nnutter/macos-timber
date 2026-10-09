@@ -63,7 +63,7 @@ codesign --verify --verbose dist/Timber.app
 """
 
 [tasks.test]
-description = "Run the TimberModel test suite"
+description = "Run the model and CLI integration test suites"
 run = """
 set -euo pipefail
 if [ -z "${DEVELOPER_DIR:-}" ] && [ -d /Applications/Xcode.app ]; then

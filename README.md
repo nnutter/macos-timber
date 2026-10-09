@@ -19,17 +19,18 @@ managed Git worktrees. Requires the `timber` CLI and an Xcode toolchain.
 - Delete is two-phase: first click arms (red), second click runs
   `timber remove`. Any list change or selection move disarms.
 - `+` header button opens a `timber repo add <url> [--name]` form.
-- Failures post a macOS notification; never silently.
+- Action failures post a macOS notification.
 - Keyboard: Up/Down move, Return activates, Esc closes form / clears
   filter, Ctrl+U clears.
 - Right-click (or Ctrl-click) the menubar icon for an Open at Login toggle
   and Quit;
   left-click toggles the popover.
 
-Notes on parity: enumeration is implemented natively with FileManager
-(`timber repo list -q` plus a worktree-root scan) instead of the bash +
-globstar script, since macOS ships bash 3.2. `timber repo add` here has no
-`--alias` flag, so the form has URL + Name only.
+Worktree names and locations come from `timber list --json`, including custom checkout locations and worktrees created directly with Git for registered repositories.
+The app opens the returned path rather than inferring a path from the worktree name.
+If the CLI listing fails, the app retains its cached list.
+Repository names for creation come from `timber repo list -q`.
+The repository form has URL + Name only, since `timber repo add` has no `--alias` flag.
 
 ## Layout
 
@@ -49,6 +50,7 @@ globstar script, since macOS ships bash 3.2. `timber repo add` here has no
   `mise run build` compiles it to `Assets.car` via `actool`, and
   `CFBundleIconName` in `packaging/Info.plist` points at it.
 - `Tests/TimberModelTests/` — unit tests for the model.
+- `Tests/TimberTests/` — CLI enumeration and refresh integration tests.
 
 ## Build & run
 
@@ -58,7 +60,7 @@ pin `DEVELOPER_DIR` to Xcode explicitly (or run
 
 ```sh
 mise run      # builds dist/Timber.app and opens it (recommended)
-mise test     # swift test (TimberModel suite)
+mise test     # swift test (model and CLI integration suites)
 mise lint     # SwiftLint (strict) + SwiftFormat check
 mise format   # format Sources and Tests in place
 ```

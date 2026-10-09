@@ -2,9 +2,9 @@ import Foundation
 import TimberModel
 import UserNotifications
 
-// Shell-out layer: runs the `timber` CLI, enumerates repos/worktrees the
-// same way omarchy-timber's listScript does, opens paths in Zed, and posts
-// notifications. Menubar apps launched from Finder do not inherit a shell
+// Shell-out layer: runs the `timber` CLI, lists repos/worktrees, opens
+// paths in Zed, and posts notifications.
+// Menubar apps launched from Finder do not inherit a shell
 // PATH, so executables are located by searching well-known directories.
 
 enum TimberCommand {
@@ -81,30 +81,10 @@ enum TimberCommand {
 
     // MARK: - Enumeration
 
-    /// Status/Todo details for known worktrees, keyed by `name@repo`.
-    /// Empty when `timber list --json` fails: the filesystem scan below
-    /// stays the source of truth for membership, so one unreadable
-    /// worktree hides its badges instead of failing the whole listing.
-    static func listDetails() -> [String: TimberListDetail] {
-        guard let result = try? runTimber(["list", "--json"]), result.code == 0,
-              let data = result.stdout.data(using: .utf8),
-              let rows = try? JSONDecoder().decode([TimberListDetail].self, from: data)
-        else { return [:] }
-        var details: [String: TimberListDetail] = [:]
-        for row in rows {
-            details[TimberModel.worktreeValue(name: row.name, repo: row.repo)] = row
-        }
-        return details
-    }
-
-    /// Same enumeration timber's own zsh completion uses: registered repo
-    /// names plus a scan of the worktree root for `<root>/<repo>/**/<repo>`
-    /// directories containing `.git`. The scan (not `timber list`) owns
-    /// membership: its styled table still emits ANSI under NO_COLOR and it
-    /// enriches every row with git status, so one missing worktree
-    /// directory fails the whole listing. `timber list --json` only
-    /// enriches scanned rows with Status/Todo details.
-    static func enumerate() -> (repos: [TimberRepo], worktrees: [TimberWorktree]) {
+    /// The CLI owns worktree names and paths, including checkouts outside
+    /// Timber's default layout. A failed listing throws so callers can
+    /// retain the previous cache instead of treating failure as an empty list.
+    static func enumerate() throws -> (repos: [TimberRepo], worktrees: [TimberWorktree]) {
         let fm = FileManager.default
         var repoNames: [String] = []
         if let result = try? runTimber(["repo", "list", "-q"]), result.code == 0 {
@@ -120,35 +100,24 @@ enum TimberCommand {
             }
         }
 
-        let root = ProcessInfo.processInfo.environment["TIMBER_WORKTREE_ROOT"]
-            ?? fm.homeDirectoryForCurrentUser.appendingPathComponent("worktrees").path
-        let gitExe = findExecutable("git")
-        let details = listDetails()
-        var worktrees: [TimberWorktree] = []
-        for repo in repoNames {
-            let base = URL(fileURLWithPath: root).appendingPathComponent(repo)
-            for dir in walkDirectories(at: base, matching: repo, maxDepth: 8) {
-                let parent = dir.deletingLastPathComponent()
-                let rel = parent.path.hasPrefix(base.path + "/")
-                    ? String(parent.path.dropFirst(base.path.count + 1))
-                    : ""
-                guard !rel.isEmpty else { continue }
-                let detail = details[TimberModel.worktreeValue(name: rel, repo: repo)]
-                worktrees.append(TimberWorktree(
-                    name: rel,
-                    repo: repo,
-                    path: dir.path,
-                    lastCommitAt: commitDate(atPath: dir.path, gitExe: gitExe),
-                    ahead: detail?.ahead ?? 0,
-                    behind: detail?.behind ?? 0,
-                    merged: detail?.merged ?? false,
-                    statusError: detail?.statusError ?? false,
-                    todoDone: detail?.todoDone ?? 0,
-                    todoTotal: detail?.todoTotal ?? 0
-                ))
-            }
+        let result = try runTimber(["list", "--json"])
+        guard result.code == 0 else {
+            throw NSError(
+                domain: "Timber", code: Int(result.code),
+                userInfo: [NSLocalizedDescriptionKey: result.stderr]
+            )
         }
-        return (repoNames.map { TimberRepo(name: $0) }, worktrees.sorted { $0.value < $1.value })
+        let rows = try JSONDecoder().decode([TimberListDetail].self, from: Data(result.stdout.utf8))
+        let gitExe = findExecutable("git")
+        let worktrees = rows.map { row in
+            TimberWorktree(
+                name: row.name, repo: row.repo, path: row.path,
+                lastCommitAt: commitDate(atPath: row.path, gitExe: gitExe),
+                ahead: row.ahead, behind: row.behind, merged: row.merged,
+                statusError: row.statusError, todoDone: row.todoDone, todoTotal: row.todoTotal
+            )
+        }
+        return (repoNames.map { TimberRepo(name: $0) }, worktrees)
     }
 
     /// Newest commit date for recency sorting, falling back to the
@@ -166,33 +135,6 @@ enum TimberCommand {
         guard let result = try? run(gitExe, args: ["-C", path, "log", "-1", "--format=%ct"]) else { return nil }
         guard result.code == 0 else { return nil }
         return Double(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
-    }
-
-    /// Directories named `name` containing a `.git` entry, up to maxDepth
-    /// below (and excluding) the base itself.
-    private static func walkDirectories(at base: URL, matching name: String, maxDepth: Int) -> [URL] {
-        var found: [URL] = []
-        var stack: [(URL, Int)] = [(base, 0)]
-        let fm = FileManager.default
-        while let (dir, depth) = stack.popLast() {
-            guard depth < maxDepth else { continue }
-            guard let entries = try? fm.contentsOfDirectory(
-                at: dir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
-            ) else { continue }
-            for entry in entries {
-                guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
-                if entry.lastPathComponent == "node_modules" {
-                    continue
-                }
-                if entry.lastPathComponent == name {
-                    if fm.fileExists(atPath: entry.appendingPathComponent(".git").path) {
-                        found.append(entry)
-                    }
-                }
-                stack.append((entry, depth + 1))
-            }
-        }
-        return found
     }
 
     // MARK: - Open
@@ -244,11 +186,5 @@ enum TimberCommand {
         } else if let osascript = findExecutable("osascript") {
             _ = try? run(osascript, args: TimberModel.appleScriptNotifyArgs(title: title, body: body))
         }
-    }
-}
-
-private extension TimberWorktree {
-    var value: String {
-        TimberModel.worktreeValue(name: name, repo: repo)
     }
 }
