@@ -1,0 +1,235 @@
+name: Update Tap
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to publish to nnutter/homebrew-tap
+        required: true
+        type: string
+    secrets:
+      APP_PRIVATE_KEY:
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish to nnutter/homebrew-tap
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-tap
+  cancel-in-progress: false
+
+jobs:
+  update-cask:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CASK_NAME: macos-timber
+      TAP_OWNER: nnutter
+      TAP_REPOSITORY: homebrew-tap
+    steps:
+      - name: Resolve release tag
+        id: release
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The release tag must have the form vMAJOR.MINOR.PATCH." >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download and verify Timber.zip
+        id: asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPOSITORY: ${{ github.repository }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          work="$(mktemp -d "$RUNNER_TEMP/timber-release.XXXXXX")"
+          export ASSET_DIR="$work"
+          gh api "repos/${UPSTREAM_REPOSITORY}/releases/tags/${TAG}" > "$work/release.json"
+          gh release download "$TAG" \
+            --repo "$UPSTREAM_REPOSITORY" \
+            --pattern Timber.zip \
+            --dir "$work"
+          python3 <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import plistlib
+          import zipfile
+
+          work = Path(os.environ["ASSET_DIR"])
+          release = json.loads((work / "release.json").read_text())
+          if release["draft"] or release["prerelease"]:
+              raise SystemExit("Only published stable releases can update the cask.")
+          if release["tag_name"] != os.environ["TAG"]:
+              raise SystemExit("The release tag does not match the requested tag.")
+          assets = [asset for asset in release["assets"] if asset["name"] == "Timber.zip"]
+          if len(assets) != 1:
+              raise SystemExit("The release must contain exactly one Timber.zip asset.")
+          with (work / "Timber.zip").open("rb") as archive:
+              sha256 = hashlib.file_digest(archive, "sha256").hexdigest()
+          if assets[0].get("digest") != f"sha256:{sha256}":
+              raise SystemExit("Timber.zip does not match GitHub's SHA-256 digest, or the digest is absent.")
+          with zipfile.ZipFile(work / "Timber.zip") as archive:
+              if archive.testzip() is not None:
+                  raise SystemExit("Timber.zip failed the ZIP integrity check.")
+              executable = archive.getinfo("Timber.app/Contents/MacOS/Timber")
+              if executable.is_dir() or executable.file_size == 0:
+                  raise SystemExit("Timber.zip does not contain the Timber executable.")
+              info = plistlib.loads(archive.read("Timber.app/Contents/Info.plist"))
+              if info.get("CFBundleShortVersionString") != os.environ["VERSION"]:
+                  raise SystemExit("The app bundle version does not match the release tag.")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"sha256={sha256}\n")
+          print(f"Verified Timber.zip: sha256:{sha256}")
+          PY
+
+      - name: Generate a token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ env.TAP_OWNER }}
+          repositories: ${{ env.TAP_REPOSITORY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Check out the tap
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.TAP_OWNER }}/${{ env.TAP_REPOSITORY }}
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Update the cask version and checksum
+        id: needed
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          SHA256: ${{ steps.asset.outputs.sha256 }}
+        run: |
+          python3 <<'PY'
+          import os
+          from pathlib import Path
+          import re
+
+          path = Path("Casks") / f"{os.environ['CASK_NAME']}.rb"
+          if not path.is_file():
+              raise SystemExit(f"Merge the initial cask into the tap at {path} before running this workflow.")
+          original = path.read_text()
+          expected_url = '  url "https://github.com/' + os.environ["GITHUB_REPOSITORY"] + '/releases/download/v#{version}/Timber.zip"'
+          if expected_url not in original.splitlines():
+              raise SystemExit("The cask URL must reference this repository's versioned Timber.zip release asset.")
+          updated = original
+          for field, value in (("version", os.environ["VERSION"]), ("sha256", os.environ["SHA256"])):
+              updated, count = re.subn(
+                  rf'(?m)^  {field} "[^"\n]+"$',
+                  f'  {field} "{value}"',
+                  updated,
+              )
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one top-level {field} stanza in {path}.")
+          needed = updated != original
+          if needed:
+              path.write_text(updated)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"needed={str(needed).lower()}\n")
+          if not needed:
+              print(f"{path} already uses the verified version and checksum.")
+          PY
+
+      - name: Configure git for the app
+        if: steps.needed.outputs.needed == 'true'
+        env:
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+      - name: Create the cask branch
+        if: steps.needed.outputs.needed == 'true'
+        env:
+          BRANCH_NAME: cask-updates/${{ env.CASK_NAME }}-${{ steps.release.outputs.tag }}
+        run: git switch --create "$BRANCH_NAME"
+
+      - name: Commit the cask update
+        if: steps.needed.outputs.needed == 'true'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          git diff --check
+          git add "Casks/${CASK_NAME}.rb"
+          git commit -m "Update ${CASK_NAME} to ${TAG}"
+
+      - name: Push the cask branch
+        if: steps.needed.outputs.needed == 'true'
+        env:
+          BRANCH_NAME: cask-updates/${{ env.CASK_NAME }}-${{ steps.release.outputs.tag }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAP_OWNER: ${{ env.TAP_OWNER }}
+          TAP_REPOSITORY: ${{ env.TAP_REPOSITORY }}
+        run: |
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${TAP_OWNER}/${TAP_REPOSITORY}.git"
+          existing_sha="$(git ls-remote "$remote" "refs/heads/${BRANCH_NAME}" | cut -f1)"
+          git push --force-with-lease="refs/heads/${BRANCH_NAME}:${existing_sha}" \
+            "$remote" \
+            "HEAD:refs/heads/${BRANCH_NAME}"
+
+      - name: Open a pull request
+        if: steps.needed.outputs.needed == 'true'
+        env:
+          BRANCH_NAME: cask-updates/${{ env.CASK_NAME }}-${{ steps.release.outputs.tag }}
+          CASK_NAME: ${{ env.CASK_NAME }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          TAP_OWNER: ${{ env.TAP_OWNER }}
+          TAP_REPOSITORY: ${{ env.TAP_REPOSITORY }}
+          UPSTREAM_REPOSITORY: ${{ github.repository }}
+        run: |
+          tap="${TAP_OWNER}/${TAP_REPOSITORY}"
+          existing_url="$(
+            gh pr list \
+              --repo "$tap" \
+              --head "$BRANCH_NAME" \
+              --state open \
+              --json url \
+              --jq '.[0].url // empty'
+          )"
+          if [[ -n "$existing_url" ]]; then
+            echo "Pull request already exists: $existing_url"
+            exit 0
+          fi
+
+          gh pr create \
+            --repo "$tap" \
+            --title "Updated ${CASK_NAME} to ${TAG}" \
+            --head "$BRANCH_NAME" \
+            --base "$(gh repo view "$tap" --json defaultBranchRef --jq .defaultBranchRef.name)" \
+            --body "Update ${CASK_NAME} to ${TAG} from ${UPSTREAM_REPOSITORY}."
+
+      - name: Enable auto-merge
+        if: steps.needed.outputs.needed == 'true'
+        env:
+          BRANCH_NAME: cask-updates/${{ env.CASK_NAME }}-${{ steps.release.outputs.tag }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAP_OWNER: ${{ env.TAP_OWNER }}
+          TAP_REPOSITORY: ${{ env.TAP_REPOSITORY }}
+        run: |
+          gh pr merge \
+            --repo "${TAP_OWNER}/${TAP_REPOSITORY}" \
+            --merge \
+            --auto \
+            "$BRANCH_NAME"

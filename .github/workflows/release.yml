@@ -38,3 +38,14 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/Timber.zip \
             --title "$GITHUB_REF_NAME" \
             --generate-notes
+
+  update-tap:
+    name: Update the Homebrew cask
+    needs: release
+    permissions:
+      contents: read
+    uses: ./.github/workflows/update-tap.yaml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets:
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
