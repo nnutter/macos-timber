@@ -26,7 +26,7 @@ struct TimberPopover: View {
                     .onChange(of: state.filter) { _, _ in state.filterChanged() }
                     .disabled(state.busy)
 
-                if state.busy {
+                if state.busy, state.removingValue.isEmpty {
                     ProgressView()
                         .scaleEffect(0.6)
                         .frame(width: 20, height: 20)
@@ -142,6 +142,10 @@ struct TimberRow: View {
         state.armedRemoveValue == item.value
     }
 
+    private var removing: Bool {
+        state.removingValue == item.value
+    }
+
     private let iconBox: CGFloat = 22
     private let iconSize: CGFloat = 14
 
@@ -182,54 +186,67 @@ struct TimberRow: View {
             // jumps and the window never clips the row when buttons
             // appear, while still making the hovered row obvious.
             HStack(spacing: 4) {
-                Button {
-                    state.openInZed(item)
-                } label: {
-                    Image(nsImage: TimberIcons.zed)
-                        .renderingMode(.template)
-                        .resizable()
-                        .frame(width: iconSize, height: iconSize)
-                        .foregroundStyle(.primary)
-                }
-                .buttonStyle(.plain)
-                .frame(width: iconBox, height: iconBox)
-                .help(item.kind == .open ? "Open in Zed" : "Create and open in Zed")
-
-                Button {
-                    state.openInHerdr(item)
-                } label: {
-                    Image(nsImage: TimberIcons.herdr)
-                        .renderingMode(.template)
-                        .resizable()
-                        .frame(width: iconSize, height: iconSize)
-                        .foregroundStyle(.primary)
-                }
-                .buttonStyle(.plain)
-                .frame(width: iconBox, height: iconBox)
-                .help(item.kind == .open ? "Open in Herdr" : "Create in Herdr")
-
-                if item.kind == .open {
+                HStack(spacing: 4) {
                     Button {
-                        state.armOrRemove(item)
+                        state.openInZed(item)
                     } label: {
-                        Image(systemName: "trash")
+                        Image(nsImage: TimberIcons.zed)
+                            .renderingMode(.template)
+                            .resizable()
                             .frame(width: iconSize, height: iconSize)
+                            .foregroundStyle(.primary)
                     }
                     .buttonStyle(.plain)
                     .frame(width: iconBox, height: iconBox)
-                    .foregroundStyle(armed ? .red : .primary)
-                    .help(armed ? "Click again to remove \(item.value)" : "Remove \(item.value)")
-                } else {
-                    // Invisible placeholder keeps the cluster width stable.
-                    Image(systemName: "trash")
-                        .frame(width: iconSize, height: iconSize)
-                        .frame(width: iconBox, height: iconBox)
-                        .opacity(0)
+                    .disabled(!selected || state.busy)
+                    .help(item.kind == .open ? "Open in Zed" : "Create and open in Zed")
+
+                    Button {
+                        state.openInHerdr(item)
+                    } label: {
+                        Image(nsImage: TimberIcons.herdr)
+                            .renderingMode(.template)
+                            .resizable()
+                            .frame(width: iconSize, height: iconSize)
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: iconBox, height: iconBox)
+                    .disabled(!selected || state.busy)
+                    .help(item.kind == .open ? "Open in Herdr" : "Create in Herdr")
                 }
+                .opacity(selected ? 1 : 0.2)
+
+                Group {
+                    if item.kind == .open {
+                        if removing {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: iconBox, height: iconBox)
+                        } else {
+                            Button {
+                                state.armOrRemove(item)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .frame(width: iconSize, height: iconSize)
+                            }
+                            .buttonStyle(.plain)
+                            .frame(width: iconBox, height: iconBox)
+                            .foregroundStyle(armed ? .red : .primary)
+                            .disabled(!selected || state.busy)
+                            .help(armed ? "Click again to remove \(item.value)" : "Remove \(item.value)")
+                        }
+                    } else {
+                        // Invisible placeholder keeps the cluster width stable.
+                        Image(systemName: "trash")
+                            .frame(width: iconSize, height: iconSize)
+                            .frame(width: iconBox, height: iconBox)
+                            .opacity(0)
+                    }
+                }
+                .opacity(selected || removing ? 1 : 0.2)
             }
             .layoutPriority(1)
-            .opacity(selected ? 1 : 0.2)
-            .disabled(!selected || state.busy)
         }
         .frame(height: 32)
         .contentShape(Rectangle())

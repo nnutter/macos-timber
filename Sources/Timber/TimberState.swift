@@ -16,6 +16,8 @@ final class TimberState: ObservableObject {
     @Published var selectedID: TimberItem.ID?
     @Published var cursorActive = false
     @Published var armedRemoveValue = ""
+    /// `name@repo` of a delete in flight. The row spinner reads this.
+    @Published var removingValue = ""
     @Published var repoFormOpen = false
     @Published var repoURL = ""
     @Published var repoName = ""
@@ -45,12 +47,14 @@ final class TimberState: ObservableObject {
     /// popover — filter text, selection, and cursor stay as they are.
     func refreshInBackground() {
         background {
-            let (repos, worktrees) = TimberCommand.enumerate()
+            let snapshot = try? TimberCommand.enumerate()
             self.onMain {
-                self.repos = repos
-                self.worktrees = worktrees
+                if let (repos, worktrees) = snapshot {
+                    self.repos = repos
+                    self.worktrees = worktrees
+                    self.rebuild()
+                }
                 self.listing = false
-                self.rebuild()
             }
         }
     }
@@ -73,12 +77,14 @@ final class TimberState: ObservableObject {
         armedRemoveValue = ""
         listing = true
         background {
-            let (repos, worktrees) = TimberCommand.enumerate()
+            let snapshot = try? TimberCommand.enumerate()
             self.onMain {
-                self.repos = repos
-                self.worktrees = worktrees
+                if let (repos, worktrees) = snapshot {
+                    self.repos = repos
+                    self.worktrees = worktrees
+                    self.rebuild()
+                }
                 self.listing = false
-                self.rebuild()
             }
         }
     }

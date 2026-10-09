@@ -20,6 +20,11 @@ let package = Package(
             resources: [.process("Resources")]
         ),
         .testTarget(
+            name: "TimberTests",
+            dependencies: ["Timber", "TimberModel"],
+            path: "Tests/TimberTests"
+        ),
+        .testTarget(
             name: "TimberModelTests",
             dependencies: ["TimberModel"],
             path: "Tests/TimberModelTests"
