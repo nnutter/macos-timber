@@ -16,6 +16,8 @@ final class TimberState: ObservableObject {
     @Published var selectedID: TimberItem.ID?
     @Published var cursorActive = false
     @Published var armedRemoveValue = ""
+    /// `name@repo` of a delete in flight. The row spinner reads this.
+    @Published var removingValue = ""
     @Published var repoFormOpen = false
     @Published var repoURL = ""
     @Published var repoName = ""
