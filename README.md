@@ -12,7 +12,7 @@ managed Git worktrees. Requires the `timber` CLI and an Xcode toolchain.
   field (`type worktree@repo`). `@` narrows by repo, e.g. `f@scribble`.
 - Typing a qualified `name@repo` that does not exist yet offers a `+` row
   to create it (`timber create --no-herdr`), then opens it in Zed.
-- Row click or Return opens the worktree in Zed (`zed --new`).
+- Row click or Return opens the worktree in Zed (`zed <path>`, respecting the CLI new/existing window setting).
 - Selected rows show Zed / Herdr / delete buttons. Herdr runs
   `timber herdr space --new` (or creates with `--herdr`) and posts a
   notification instead of opening Zed.
