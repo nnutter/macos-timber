@@ -139,11 +139,12 @@ enum TimberCommand {
 
     // MARK: - Open
 
-    /// Open a path in Zed (`zed --new`), falling back to Finder `open`
+    /// Open a path in Zed (`zed <path>`, respecting the user's CLI setting
+    /// for new vs. existing window), falling back to Finder `open`
     /// when Zed is not installed.
     static func openPath(_ path: String) throws {
         if let zed = findExecutable("zed") {
-            let result = try run(zed, args: ["--new", path])
+            let result = try run(zed, args: [path])
             if result.code == 0 {
                 return
             }
